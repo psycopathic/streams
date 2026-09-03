@@ -1,65 +1,39 @@
-import pg from "pg";
-import type { QueryResultRow } from "pg";
-import { env } from "./env.js";
 import { logger } from "./logger.js";
+import { Pool, type QueryResult, type QueryResultRow } from "pg";
 
-const { Pool } = pg;
-let pool: pg.Pool | null = null;
+let pool: Pool | null = null;
 
-export const getPool = (): pg.Pool => {
+export const getPool = () => {
   if (!pool) {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      logger.error("DATABASE_URL is not set");
+      throw new Error("DATABASE_URL is not set");
+    }
     pool = new Pool({
-      connectionString: env.DATABASE_URL,
-      max: env.DB_POOL_MAX,
-      idleTimeoutMillis: env.DB_POOL_IDLE_TIMEOUT_MS,
-      connectionTimeoutMillis: env.DB_POOL_CONNECTION_TIMEOUT_MS,
-    });
-
-    pool.on("error", (error) => {
-      logger.error("PostgreSQL pool error", {
-        error: { name: error.name, message: error.message, stack: error.stack },
-      });
+      connectionString,
     });
   }
-
   return pool;
 };
 
-export const query = async <T extends QueryResultRow>(
-  text: string,
-  params: unknown[] = [],
-): Promise<pg.QueryResult<T>> => {
-  const startedAt = performance.now();
-  try {
-    const result = await getPool().query<T>(text, params);
-    logger.debug("DB_QUERY", {
-      operation: text.trim().split(/\s+/)[0]?.toUpperCase(),
-      duration: Math.round((performance.now() - startedAt) * 100) / 100,
-      rowCount: result.rowCount,
-    });
-    return result;
-  } catch (error) {
-    logger.error("Database query failed", {
-      operation: text.trim().split(/\s+/)[0]?.toUpperCase(),
-      duration: Math.round((performance.now() - startedAt) * 100) / 100,
-      error,
-    });
-    throw error;
-  }
-};
-
-export const connectDatabase = async (): Promise<void> => {
+export const connectDatabase = async () => {
   await getPool().query("SELECT 1");
-  logger.info("Database connected", { databaseUrlConfigured: Boolean(env.DATABASE_URL) });
+  logger.info("Database connected");
 };
 
-export const disconnectDatabase = async (): Promise<void> => {
-  if (!pool) return;
-  await pool.end();
-  pool = null;
-  logger.info("Database disconnected");
+export const query = async <T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: unknown[],
+): Promise<QueryResult<T>> => {
+  return getPool().query<T>(text, params);
 };
 
-export const checkDatabaseReadiness = async (): Promise<void> => {
-  await query("SELECT 1");
-};
+export async function closePool() {
+  if (pool) {
+    await pool.end();
+    pool = null;
+  }
+}
+
+export const disconnectDatabase = closePool;
