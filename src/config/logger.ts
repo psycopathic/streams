@@ -35,7 +35,6 @@ const redact = (value: unknown): unknown => {
 const requestContextFormat = winston.format((info) => {
   const context = getRequestContext();
   if (context?.requestId && !info.requestId) info.requestId = context.requestId;
-  if (context?.userId && !info.userId) info.userId = context.userId;
   return redact(info) as winston.Logform.TransformableInfo;
 });
 
@@ -50,7 +49,6 @@ const consoleFormat = winston.format.combine(
   winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss.SSS" }),
   winston.format.errors({ stack: true }),
   requestContextFormat(),
-  isProduction ? winston.format.json() : winston.format.colorize(),
   isProduction
     ? winston.format.json()
     : winston.format.printf(({ timestamp, level, message, ...meta }) => {

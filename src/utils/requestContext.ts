@@ -8,8 +8,3 @@ export const runWithRequestContext = <T>(context: RequestContext, callback: () =
 };
 
 export const getRequestContext = (): RequestContext | undefined => storage.getStore();
-
-export const setRequestUser = (userId: string): void => {
-  const context = storage.getStore();
-  if (context) context.userId = userId;
-};

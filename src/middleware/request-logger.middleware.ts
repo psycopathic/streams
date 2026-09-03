@@ -23,7 +23,6 @@ export const requestLoggerMiddleware = (req: Request, res: Response, next: NextF
       ip: req.ip,
       userAgent: req.get("user-agent"),
       contentLength: res.getHeader("content-length"),
-      userId: req.user?.id,
     });
   });
 

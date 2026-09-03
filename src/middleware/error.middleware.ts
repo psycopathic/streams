@@ -34,7 +34,6 @@ export const errorMiddleware = (
     method: req.method,
     path: req.originalUrl,
     ip: req.ip,
-    userId: req.user?.id,
     params: sanitizeObject(req.params),
     query: sanitizeObject(req.query),
     error: {

@@ -1,27 +1,32 @@
-import type { Response } from "express";
-import type { PaginationMeta } from "../types/common.types.js";
+import { Response } from "express";
 
-interface ApiResponseMeta {
-  requestId: string;
-  pagination?: PaginationMeta;
-}
+type ApiResponseBody = Record<string, unknown>;
 
-export class ApiResponse {
-  static success<T>(res: Response, data: T, statusCode = 200, pagination?: PaginationMeta): Response {
-    const meta: ApiResponseMeta = { requestId: res.req.requestId };
-    if (pagination) meta.pagination = pagination;
-    return res.status(statusCode).json({ success: true, data, meta });
-  }
+export const successResponse = (res: Response, message: {}, statusCode: number = 200) => {
+  return res.status(statusCode).json({
+    message,
+    success: true,
+  });
+};
 
-  static error(
-    res: Response,
-    statusCode: number,
-    error: { code: string; message: string; details?: unknown },
-  ): Response {
+export const failureResponse = (res: Response, message: {}, statusCode: number = 400) => {
+  return res.status(statusCode).json({
+    message,
+    success: false,
+  });
+};
+
+export const ApiResponse = {
+  success: (res: Response, statusCode: number, body: ApiResponseBody) => {
+    return res.status(statusCode).json({
+      success: true,
+      ...body,
+    });
+  },
+  error: (res: Response, statusCode: number, body: ApiResponseBody) => {
     return res.status(statusCode).json({
       success: false,
-      error,
-      meta: { requestId: res.req.requestId },
+      ...body,
     });
-  }
-}
+  },
+};
