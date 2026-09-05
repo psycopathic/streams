@@ -30,7 +30,7 @@ const toNumber = (value: string | undefined) => {
 export const probeVideo = async (filePath: string): Promise<VideoProbeResult> => {
   const { stdout } = await execFileAsync("ffprobe", [
     "-v",
-    "errror",
+    "error",
     "-print_format",
     "json",
     "-show_streams",
