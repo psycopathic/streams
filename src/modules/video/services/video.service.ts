@@ -5,13 +5,8 @@ import {
   findVideoById,
   updateVideoStatus,
 } from "../repositories/video.repository.js";
-import { env } from "../../../config/env.js";
+import { startVideoProcessing } from "../../processing/services/processing.service.js";
 import { verifyObjectExists } from "../../../utils/s3.js";
-// import { verify } from "crypto";
-
-// const triggerProcessing = async () => {
-//     const response = await fetch
-// }
 
 export const completeUpload = async (videoId: string) => {
   const video = await findVideoById(videoId);
@@ -33,12 +28,12 @@ export const completeUpload = async (videoId: string) => {
   await updateVideoStatus(videoId, "UPLOADED");
   logger.info(`Upload completed for video on S3 ${videoId}`);
 
-  //   await triggerProcessing(videoId);
+  const processing = await startVideoProcessing(videoId);
 
   return {
-    message: "upload completed successfully",
+    message: "upload completed successfully and processing started",
     videoId: videoId,
-    status: "UPLOADED",
+    status: processing.status,
   };
 };
 
