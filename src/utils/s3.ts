@@ -64,5 +64,15 @@ export const verifyObjectExists = async (key: string) => {
   return true;
 };
 
+export const createPlaybackUrl = async (storageKey: string ): Promise<string> => {
+  const command = new GetObjectCommand({
+    Bucket: env.AWS_S3_BUCKET,
+    Key: storageKey,
+  });
+  const signedUrl = await getSignedUrl(s3, command, {expiresIn: 3600}); // env.UPLOAD_URL_EXPIRY
+  return signedUrl;
+};
+
+
 export const getObjectMetadata = verifyObjectExists;
 export { s3, bucket };

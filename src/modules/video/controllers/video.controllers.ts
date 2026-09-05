@@ -1,7 +1,7 @@
 import { Response, Request } from "express";
 import { ApiError } from "../../../utils/ApiError.js";
 import { createUpload } from "../services/upload.service.js";
-import { completeUpload, getVideo } from "../services/video.service.js";
+import { completeUpload, getVideo, getPlaybackUrl } from "../services/video.service.js";
 import { initializeUploadSchema } from "../../../types/video.js";
 import { asyncHandler } from "../../../utils/asyncHandler.js";
 
@@ -33,3 +33,10 @@ export const getVideoController = asyncHandler(async (req: Request, res: Respons
   const result = await getVideo(getVideoIdParams(req));
   return res.status(200).json(result);
 });
+
+export const getPlaybackUrlController = asyncHandler(async (req: Request, res: Response) => {
+  const result = await getPlaybackUrl(getVideoIdParams(req));
+  return res.status(200).json(result);
+});
+
+// d55b9f30-d723-4078-9df1-54965d4e4f86 
