@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Raw WebRTC Viewer Test</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+      }
+
+      input,
+      button {
+        font: inherit;
+        margin: 0.25rem 0;
+        padding: 0.5rem;
+      }
+
+      video {
+        background: #111;
+        display: block;
+        margin-top: 1rem;
+        max-width: 720px;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Viewer</h1>
+    <p>Start the broadcaster first, paste the same <code>stream.id</code>, then watch.</p>
+
+    <label>
+      Signaling URL
+      <input id="signalingUrl" size="40" value="ws://localhost:3000/ws/live" />
+    </label>
+    <br />
+    <label>
+      Stream ID
+      <input id="streamId" size="40" placeholder="stream UUID" />
+    </label>
+    <br />
+    <button id="watch">Watch</button>
+
+    <video id="video" autoplay playsinline controls></video>
+    <pre id="log"></pre>
+
+    <script>
+      const log = (message) => {
+        document.getElementById("log").textContent += `${new Date().toISOString()} ${message}\n`;
+      };
+
+      document.getElementById("watch").onclick = async () => {
+        const streamId = document.getElementById("streamId").value.trim();
+        const signalingUrl = document.getElementById("signalingUrl").value.trim();
+        const viewerId = crypto.randomUUID();
+
+        if (!streamId) {
+          alert("Stream ID is required");
+          return;
+        }
+
+        const socket = new WebSocket(signalingUrl);
+        const peer = new RTCPeerConnection({
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        });
+
+        peer.ontrack = (event) => {
+          document.getElementById("video").srcObject = event.streams[0];
+          log("remote track received");
+        };
+
+        peer.onicecandidate = (candidateEvent) => {
+          if (!candidateEvent.candidate) return;
+          socket.send(
+            JSON.stringify({
+              type: "ice-candidate",
+              streamId,
+              viewerId,
+              target: "broadcaster",
+              candidate: candidateEvent.candidate,
+            }),
+          );
+        };
+
+        socket.onopen = () => {
+          log("WebSocket connected");
+          socket.send(JSON.stringify({ type: "join_viewer", streamId, viewerId }));
+        };
+
+        socket.onmessage = async (event) => {
+          const message = JSON.parse(event.data);
+          log(`received ${message.type}`);
+
+          if (message.type === "offer") {
+            await peer.setRemoteDescription(message.sdp);
+
+            const answer = await peer.createAnswer();
+            await peer.setLocalDescription(answer);
+
+            socket.send(JSON.stringify({ type: "answer", streamId, viewerId, sdp: answer }));
+          }
+
+          if (message.type === "ice-candidate") {
+            await peer.addIceCandidate(message.candidate);
+          }
+
+          if (message.type === "stream-ended") {
+            peer.close();
+            log("stream ended");
+          }
+
+          if (message.type === "error") {
+            log(`error: ${message.message}`);
+          }
+        };
+
+        socket.onclose = () => log("WebSocket closed");
+        socket.onerror = () => log("WebSocket error");
+      };
+    </script>
+  </body>
+</html>
