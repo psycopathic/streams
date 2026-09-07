@@ -3,8 +3,10 @@ import { app } from "./app.js";
 import { connectDatabase, disconnectDatabase } from "./config/database.js";
 import { env } from "./config/env.js";
 import { flushLogs, logger } from "./config/logger.js";
+import { attachSignalingServer } from "./modules/signaling/signaling.server.js";
 
 const server = http.createServer(app);
+attachSignalingServer(server);
 let isShuttingDown = false;
 
 const start = async (): Promise<void> => {

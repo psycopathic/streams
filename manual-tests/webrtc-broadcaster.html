@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Raw WebRTC Broadcaster Test</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+      }
+
+      input,
+      select,
+      button {
+        font: inherit;
+        margin: 0.25rem 0;
+        padding: 0.5rem;
+      }
+
+      video {
+        background: #111;
+        display: block;
+        margin-top: 1rem;
+        max-width: 720px;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Broadcaster</h1>
+    <p>Create a stream through the API, paste its <code>stream.id</code>, then start broadcasting.</p>
+
+    <label>
+      Signaling URL
+      <input id="signalingUrl" size="40" value="ws://localhost:3000/ws/live" />
+    </label>
+    <br />
+    <label>
+      Stream ID
+      <input id="streamId" size="40" placeholder="stream UUID" />
+    </label>
+    <br />
+    <label>
+      Quality
+      <select id="quality">
+        <option value="360p">360p</option>
+        <option value="480p">480p</option>
+        <option value="720p" selected>720p</option>
+        <option value="1080p">1080p</option>
+      </select>
+    </label>
+    <button id="applyQuality" disabled>Apply Quality</button>
+    <br />
+    <button id="start">Start Broadcast</button>
+
+    <video id="preview" autoplay muted playsinline></video>
+    <pre id="log"></pre>
+
+    <script>
+      const peers = new Map();
+      let socket;
+      let localStream;
+      let selectedPreset;
+
+      const qualityPresets = {
+        "360p": { width: 640, height: 360, frameRate: 30, videoBitrate: 800000 },
+        "480p": { width: 854, height: 480, frameRate: 30, videoBitrate: 1200000 },
+        "720p": { width: 1280, height: 720, frameRate: 30, videoBitrate: 2500000 },
+        "1080p": { width: 1920, height: 1080, frameRate: 30, videoBitrate: 4500000 },
+      };
+
+      const log = (message) => {
+        document.getElementById("log").textContent += `${new Date().toISOString()} ${message}\n`;
+      };
+
+      const applyVideoBitrate = async (peer, preset) => {
+        const videoSender = peer.getSenders().find((sender) => sender.track?.kind === "video");
+
+        if (!videoSender) return;
+
+        const parameters = videoSender.getParameters();
+        parameters.encodings = [{ ...(parameters.encodings?.[0] ?? {}), maxBitrate: preset.videoBitrate }];
+        await videoSender.setParameters(parameters);
+      };
+
+      const applySelectedQuality = async () => {
+        if (!localStream) {
+          log("start broadcasting before applying quality");
+          return;
+        }
+
+        const quality = document.getElementById("quality").value;
+        selectedPreset = qualityPresets[quality];
+        const videoTrack = localStream.getVideoTracks()[0];
+
+        if (!videoTrack) {
+          log("no local video track found");
+          return;
+        }
+
+        await videoTrack.applyConstraints({
+          width: { ideal: selectedPreset.width },
+          height: { ideal: selectedPreset.height },
+          frameRate: { ideal: selectedPreset.frameRate },
+        });
+
+        await Promise.all([...peers.values()].map((peer) => applyVideoBitrate(peer, selectedPreset)));
+
+        log(`applied quality ${quality} with max bitrate ${selectedPreset.videoBitrate}bps`);
+        log(`actual camera settings ${JSON.stringify(videoTrack.getSettings())}`);
+      };
+
+      document.getElementById("quality").onchange = () => {
+        if (localStream) void applySelectedQuality();
+      };
+
+      document.getElementById("applyQuality").onclick = () => {
+        void applySelectedQuality();
+      };
+
+      document.getElementById("start").onclick = async () => {
+        const streamId = document.getElementById("streamId").value.trim();
+        const signalingUrl = document.getElementById("signalingUrl").value.trim();
+        const quality = document.getElementById("quality").value;
+        selectedPreset = qualityPresets[quality];
+
+        if (!streamId) {
+          alert("Stream ID is required");
+          return;
+        }
+
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: selectedPreset.width },
+            height: { ideal: selectedPreset.height },
+            frameRate: { ideal: selectedPreset.frameRate },
+          },
+          audio: true,
+        });
+
+        document.getElementById("preview").srcObject = localStream;
+        document.getElementById("applyQuality").disabled = false;
+
+        const videoTrack = localStream.getVideoTracks()[0];
+        log(`selected quality ${quality} with max bitrate ${selectedPreset.videoBitrate}bps`);
+        log(`actual camera settings ${JSON.stringify(videoTrack?.getSettings() ?? {})}`);
+
+        socket = new WebSocket(signalingUrl);
+
+        socket.onopen = () => {
+          log("WebSocket connected");
+          socket.send(JSON.stringify({ type: "join_broadcaster", streamId }));
+        };
+
+        socket.onmessage = async (event) => {
+          const message = JSON.parse(event.data);
+          log(`received ${message.type}`);
+
+          if (message.type === "viewer_joined") {
+            const peer = new RTCPeerConnection({
+              iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+            });
+
+            peers.set(message.viewerId, peer);
+
+            for (const track of localStream.getTracks()) {
+              peer.addTrack(track, localStream);
+            }
+
+            await applyVideoBitrate(peer, selectedPreset);
+
+            peer.onicecandidate = (candidateEvent) => {
+              if (!candidateEvent.candidate) return;
+              socket.send(
+                JSON.stringify({
+                  type: "ice-candidate",
+                  streamId,
+                  viewerId: message.viewerId,
+                  target: "viewer",
+                  candidate: candidateEvent.candidate,
+                }),
+              );
+            };
+
+            const offer = await peer.createOffer();
+            await peer.setLocalDescription(offer);
+
+            socket.send(
+              JSON.stringify({
+                type: "offer",
+                streamId,
+                viewerId: message.viewerId,
+                sdp: offer,
+              }),
+            );
+          }
+
+          if (message.type === "answer") {
+            const peer = peers.get(message.viewerId);
+            if (peer) await peer.setRemoteDescription(message.sdp);
+          }
+
+          if (message.type === "ice-candidate") {
+            const peer = peers.get(message.viewerId);
+            if (peer) await peer.addIceCandidate(message.candidate);
+          }
+
+          if (message.type === "viewer_left") {
+            const peer = peers.get(message.viewerId);
+            peer?.close();
+            peers.delete(message.viewerId);
+          }
+
+          if (message.type === "error") {
+            log(`error: ${message.message}`);
+          }
+        };
+
+        socket.onclose = () => log("WebSocket closed");
+        socket.onerror = () => log("WebSocket error");
+      };
+    </script>
+  </body>
+</html>
