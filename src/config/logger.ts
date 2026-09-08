@@ -38,6 +38,10 @@ const requestContextFormat = winston.format((info) => {
   return redact(info) as winston.Logform.TransformableInfo;
 });
 
+
+
+//this tell about the format of the log file and console output. 
+// It combines timestamp, error stack, request context, and either JSON or a custom printf format based on the environment (production or development).
 const fileFormat = winston.format.combine(
   winston.format.timestamp(),
   winston.format.errors({ stack: true }),
