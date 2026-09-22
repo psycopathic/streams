@@ -19,6 +19,9 @@ const redactKeys = new Set([
   "secret",
 ]);
 
+// here redact function is used to remove sensitive information from the log messages. 
+// It recursively traverses the log message object and replaces any values associated with keys in the redactKeys set with "[REDACTED]". 
+// This ensures that sensitive data such as passwords, tokens, and API keys are not logged in plaintext, enhancing security and privacy in the logging system.
 const redact = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(redact);
   if (value && typeof value === "object") {
@@ -32,6 +35,7 @@ const redact = (value: unknown): unknown => {
   return value;
 };
 
+// requestContextFormat is a custom Winston format that adds request context information to log messages.
 const requestContextFormat = winston.format((info) => {
   const context = getRequestContext();
   if (context?.requestId && !info.requestId) info.requestId = context.requestId;
@@ -40,7 +44,7 @@ const requestContextFormat = winston.format((info) => {
 
 
 
-//this tell about the format of the log file and console output. 
+// this tell about the format of the log file and console output. 
 // It combines timestamp, error stack, request context, and either JSON or a custom printf format based on the environment (production or development).
 const fileFormat = winston.format.combine(
   winston.format.timestamp(),
